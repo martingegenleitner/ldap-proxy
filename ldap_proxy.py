@@ -2,8 +2,10 @@
 
 # This script is taken from https://ldaptor.readthedocs.io/en/latest/cookbook/ldap-proxy.html
 
+from email import message
 from ldaptor.protocols import pureldap
 from ldaptor.protocols.pureldap import LDAPBindRequest
+from ldaptor.protocols.ldap import ldaperrors
 from ldaptor.protocols.ldap.ldapclient import LDAPClient
 from ldaptor.protocols.ldap.ldapconnector import connectToLDAPEndpoint
 from ldaptor.protocols.ldap.proxybase import ProxyBase
@@ -54,6 +56,11 @@ class LoggingProxy(ProxyBase):
         if not self.secondFactorAuthentication(self.user_id, self.otp):
             # Find a way to direct respond to the client with an error message
             # https://github.com/twisted/ldaptor/blob/4bfe2897c8b9b510d647fb1c2a5b50c88d492ab1/ldaptor/protocols/ldap/proxybase.py
+            msg = pureldap.LDAPBindResponse(
+                resultCode=ldaperrors.LDAPInvalidCredentials.resultCode,
+                errorMessage=b'Wrong OTP'
+            )
+            reply(msg)
             return defer.succeed(None)
 
         return defer.succeed((request, controls))
@@ -76,7 +83,7 @@ class LoggingProxy(ProxyBase):
             return defer.succeed(response)
 
         if not self.secondFactorAuthentication(self.user_id, self.otp):
-            response.resultCode = 49
+            response.resultCode = ldaperrors.LDAPInvalidCredentials.resultCode
             response.errorMessage = b'Wrong OTP'
             return defer.succeed(response)
 
@@ -100,27 +107,27 @@ class LoggingProxy(ProxyBase):
 
     # Mostly taken from https://github.com/python-ldap/python-ldap
     def isMultiFactorAuthUser(self, request):
-        # Build query like (distinguishedName=CN=Test User,CN=Users,DC=thales,DC=lab)
-        query = "({0}={1})".format(os.environ['LDAP_DN_ATTRIBUTE_NAME'], request.dn.decode())
+        # Query infos taken from ...
+        # * https://devconnected.com/how-to-search-ldap-using-ldapsearch-examples/
+        # * https://www.tutorialguruji.com/php/ldap-filter-for-distinguishedname/
+        # Build query like (memberOf=CN=mfa-users,CN=Users,DC=thales,DC=lab)
+        query = "({0}={1})".format(os.environ['LDAP_GROUP_MEMBER_ATTRIBUTE_NAME'], os.environ['MFA_USER_GROUP'])
 
         # Connect and bind to LDAP
         l = ldap.initialize("ldap://{0}:{1}".format(os.environ['UPSTREAM_LDAP_SERVER_HOST'], os.environ['UPSTREAM_LDAP_SERVER_PORT']))
         l.simple_bind_s(os.environ['BIND_USER'], os.environ['BIND_PASSWORD'])
 
-        # Execute the query and filter for non empty results
-        result = l.search_s(os.environ['BASE_DN'], ldap.SCOPE_SUBTREE, query)
-        resultFiltered = list(filter(lambda x: x[0] != None, result))
+        # Execute the query and filter for group members
+        result = l.search_s(request.dn.decode(), ldap.SCOPE_SUBTREE, query)
 
-        # Check if the user belongs to any group
-        if os.environ['LDAP_GROUP_MEMBER_ATTRIBUTE_NAME'] not in resultFiltered[0][1]:
+        # If user could not be found or it does not belong to the mfa-group, return None as MFA will not be performed
+        if not result:
             return None
-        # Check if the user is member of the MFA group and return the required auth username for RADIUS
-        groupMemberships = resultFiltered[0][1][os.environ['LDAP_GROUP_MEMBER_ATTRIBUTE_NAME']]
-        if os.environ['MFA_USER_GROUP'].encode() in groupMemberships:
-            radiusUsername = resultFiltered[0][1][os.environ['MFA_USER_NAME_LDAP_ATTRIBUTE']][0]
-            return radiusUsername.decode()
-        else:
-            return None
+
+        # Grab the LDAP-Attribute which shall be used for RADIUS-Auth from the result-list
+        # It's not pretty but it works...
+        radiusUsername = result[0][1][os.environ['MFA_USER_NAME_LDAP_ATTRIBUTE']][0]
+        return radiusUsername.decode()
 
     def secondFactorAuthentication(self, user, otp):
         r = radius.RADIUS(
@@ -151,6 +158,7 @@ if __name__ == '__main__':
     """
     log.startLogging(sys.stderr)
     log.msg('[ENV-Vars]')
+    log.msg('Listening on {0}'.format(os.environ['LISTENING_PORT']))
     log.msg('Upstream-LDAP = ldap://{0}:{1}'.format(os.environ['UPSTREAM_LDAP_SERVER_HOST'], os.environ['UPSTREAM_LDAP_SERVER_PORT']))
     log.msg('Bind-User = {0}'.format(os.environ['BIND_USER']))
     log.msg('MFA-Group = {0}'.format(os.environ['MFA_USER_GROUP']))
