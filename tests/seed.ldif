@@ -1,0 +1,72 @@
+# Create Subtrees for users and groups
+dn: ou=people,dc=example,dc=org
+changetype: add
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=groups,dc=example,dc=org
+changetype: add
+objectClass: organizationalUnit
+ou: Groups
+
+# Create test users
+dn: cn=user01,ou=people,dc=example,dc=org
+changetype: add
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+description: User account for authentication tests
+cn: user01
+# Password: slappasswd -s User01Test123!
+userPassword: {SSHA}ZA6KFLQpFczWx5K9uB7MFm/Ve1enMdIv
+
+dn: cn=user02,ou=people,dc=example,dc=org
+changetype: add
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+description: User account for authentication tests
+cn: user02
+userPassword: User02Test123!
+
+dn: cn=user03,ou=people,dc=example,dc=org
+changetype: add
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+description: User account for authentication tests
+cn: user03
+userPassword: User03Test123!
+
+## Create service accounts
+dn: cn=ldap-proxy,ou=people,dc=example,dc=org
+changetype: add
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+description: Bind-Account for the LDAP-Proxy
+cn: ldap-proxy
+userPassword: ProxyTest123!
+
+dn: cn=ldap-consumer,ou=people,dc=example,dc=org
+changetype: add
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+description: Bind-Account for the LDAP-Proxy
+cn: ldap-proxy
+userPassword: ConsumerTest123!
+
+# Grant service accounts permission to read directory
+dn: olcDatabase={1}{{ LDAP_BACKEND }},cn=config
+changetype: modify
+delete: olcAccess
+-
+add: olcAccess
+olcAccess: to * by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage by * break
+olcAccess: to attrs=userPassword,shadowLastChange by self write by dn="cn=admin,{{ LDAP_BASE_DN }}" write by anonymous auth by * none
+olcAccess: to * by self read by dn="cn=admin,{{ LDAP_BASE_DN }}" write by dn="cn=ldap-proxy,ou=people,dc=example,dc=org" read by dn="cn=ldap-consumer,ou=people,dc=example,dc=org" read by * none
+
+# Create test group with only 2 of 3 test users as members
+dn: cn=mfa-users,ou=groups,dc=example,dc=org
+changetype: add
+objectClass: groupOfUniqueNames
+cn: mfa-users
+description: Group of users who must authenticate against LDAP+RADIUS
+uniqueMember: cn=user01,ou=people,dc=example,dc=org
+uniqueMember: cn=user02,ou=people,dc=example,dc=org

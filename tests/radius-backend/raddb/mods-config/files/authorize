@@ -1,0 +1,3 @@
+user01              Cleartext-Password := "User01OTP"
+User02OTP           Cleartext-Password := "User02OTP"
+user01@thales.lab   Cleartext-Password := "ADUser01OTP"

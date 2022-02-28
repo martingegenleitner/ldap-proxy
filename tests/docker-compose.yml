@@ -1,0 +1,59 @@
+version: '3'
+services:
+
+  ldap-backend:
+    # Documentation on this image can be found at https://github.com/osixia/docker-openldap
+    image: osixia/openldap:latest
+    # Only expose port 389 for plain ldap as it is just for testing
+    ports:
+      - "9389:389"
+    # Change the admin pw, but use the container defaults
+    environment: 
+      LDAP_ADMIN_PASSWORD: "ThisPasswordIsUsedInTheLDAPConfig"
+    volumes:
+      # By mounting this seed file, we get a preset user account to authenticate
+      # Take a look at ldap-testing/seed.ldif to adapt the seeds to your need
+      - ./seed.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/seed.ldif
+    # The command extension is required. Else your seed file will be deleted by the container
+    command: --copy-service --loglevel debug
+
+  radius-backend:
+    build: "./radius-backend"
+    # Expose the radius ports on the docker host, allowing other processes (like ntradping)
+    # to authenticate against its radius interface
+    ports: 
+      - "1812-1813:1812-1813/udp"
+    restart: on-failure
+    command: -X
+
+  ldap-proxy:
+    # Build the image with its defaults
+    build: "../."
+    # Expose the ldap port on the docker host, allowing other processes
+    # to authenticate against it
+    ports: 
+      - "8000:8000"
+    environment:
+      # Container will communicate over internal docker network
+      UPSTREAM_LDAP_SERVER_HOST: ldap-backend
+      UPSTREAM_LDAP_SERVER_PORT: 389
+      LISTENING_PORT: 8000
+      BIND_USER: 'cn=ldap-proxy,ou=people,dc=example,dc=org'
+      BIND_PASSWORD: ProxyTest123!
+      LDAP_GROUP_MEMBER_ATTRIBUTE_NAME: memberOf
+      MFA_USER_NAME_LDAP_ATTRIBUTE: cn
+      MFA_USER_GROUP: 'cn=mfa-users,ou=groups,dc=example,dc=org'
+      CHECK_RADIUS_BEFORE_LDAP: false
+      RADIUS_SECRET: testing123
+      RADIUS_HOST: radius-backend
+      RADIUS_PORT: 1812
+    # This container can not start without a present ldap host.
+    depends_on: 
+      - ldap-backend
+      - radius-backend
+
+  tester:
+    # Build the testing-image from the local Dockerfile
+    build: "./tester"
+    depends_on:
+      - ldap-proxy
