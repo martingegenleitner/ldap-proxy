@@ -19,7 +19,3 @@ python -m pip install ldaptor
 python -m pip install py-radius
 python -m pip install python-ldap
 ```
-
-ldapsearch -D "cn=mobpass,dc=example,dc=org" -w 'Testing123!,' -p 8000 -h 192.168.123.1 -b "dc=example,dc=org" -s sub "(objectclass=*)"
-
-ldapsearch -D "cn=mobpass,dc=example,dc=org" -w 'Testing123!' -p 9389 -h 192.168.123.1 -b "dc=example,dc=org" -s sub "(objectclass=*)"
