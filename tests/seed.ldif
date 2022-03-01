@@ -52,6 +52,14 @@ description: Bind-Account for the LDAP-Proxy
 cn: ldap-proxy
 userPassword: ConsumerTest123!
 
+dn: cn=radius-frontend,ou=people,dc=example,dc=org
+changetype: add
+objectClass: simpleSecurityObject
+objectClass: organizationalRole
+description: Bind-Account for the LDAP-Proxy
+cn: ldap-proxy
+userPassword: RadiusFrontend123!
+
 # Grant service accounts permission to read directory
 dn: olcDatabase={1}{{ LDAP_BACKEND }},cn=config
 changetype: modify
@@ -60,7 +68,7 @@ delete: olcAccess
 add: olcAccess
 olcAccess: to * by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage by * break
 olcAccess: to attrs=userPassword,shadowLastChange by self write by dn="cn=admin,{{ LDAP_BASE_DN }}" write by anonymous auth by * none
-olcAccess: to * by self read by dn="cn=admin,{{ LDAP_BASE_DN }}" write by dn="cn=ldap-proxy,ou=people,dc=example,dc=org" read by dn="cn=ldap-consumer,ou=people,dc=example,dc=org" read by * none
+olcAccess: to * by self read by dn="cn=admin,{{ LDAP_BASE_DN }}" write by dn="cn=ldap-proxy,ou=people,dc=example,dc=org" read by dn="cn=ldap-consumer,ou=people,dc=example,dc=org" read by dn="cn=radius-frontend,ou=people,dc=example,dc=org" read by * none
 
 # Create test group with only 2 of 3 test users as members
 dn: cn=mfa-users,ou=groups,dc=example,dc=org

@@ -52,6 +52,21 @@ services:
       - ldap-backend
       - radius-backend
 
+  radius-frontend:
+    build: "./radius-frontend"
+    # Expose the radius ports on the docker host, allowing other processes (like ntradping)
+    # to authenticate against its radius interface
+    ports: 
+      - "1814-1815:1812-1813/udp"
+    # This container can not start without a present ldap host.
+    depends_on: 
+      - ldap-proxy
+    # Since the depends_on property does not take into account that processes within a
+    # container also take some time to boot up, this container will fail a few times and
+    # will restart since the ldap-proxy takes a few seconds to accept incoming connections
+    restart: on-failure
+    command: -X
+
   tester:
     # Build the testing-image from the local Dockerfile
     build: "./tester"
