@@ -1,0 +1,46 @@
+# This file can be used as a template to use the LDAP-Proxy with
+# THALES STA as OTP-solution and Active Directory as LDAP backend
+version: '3'
+services:
+  ldap-proxy:
+    # Build the image with its defaults
+    build: .
+    # Expose the ldap port on the docker host, allowing other processes
+    # to authenticate against it
+    ports: 
+      - "8000:8000"
+    environment:
+      # MUST BE CHANGED
+      UPSTREAM_LDAP_SERVER_HOST: DOMAIN_CONTROLLER_IP_OR_FQDN
+      # MUST NOT BE CHANGED
+      # LDAPS/sLDAP is currently not supported by LDAP-Proxy.
+      UPSTREAM_LDAP_SERVER_PORT: 389
+      # CAN BE CHANGED, but then also the `ports` section above must be updated
+      LISTENING_PORT: 8000
+      # MUST BE CHANGED
+      # Distinguished Name of Service-Account of LDAP-Proxy
+      # (must have read permission on LDAP-tree where users are located)
+      BIND_USER: 'CN=ldap-proxy,CN=Users,DC=thales,DC=lab'
+      # MUST BE CHANGED
+      # Service-Account LDAP-Password
+      BIND_PASSWORD: AD_PASSWORD_OF_BIND_USER
+      # MUST NOT BE CHANGED for Active Directory
+      LDAP_GROUP_MEMBER_ATTRIBUTE_NAME: memberOf
+      # CAN BE CHANGED
+      # Can also be attributes like 'sAMAccountName', 'cn' or 'mail'
+      # Should match with UserID or Alias in STA (check back with your Sync Agent settings)
+      MFA_USER_NAME_LDAP_ATTRIBUTE: userPrincipalName
+      # MUST BE CHANGED
+      # Group of users where MFA should be applied. Users outside this group won't get intercepted!
+      MFA_USER_GROUP: 'CN=sas-users,CN=Users,DC=thales,DC=lab'
+      # CAN BE CHANGED
+      # If you would like to check OTP before Password, change this to true
+      CHECK_RADIUS_BEFORE_LDAP: false
+      # MUST BE CHANGED
+      # Replace secret with the shared secret of your Auth-Node
+      RADIUS_SECRET: AUTH_NODE_SHARED_SECRET
+      # CAN BE CHANGED
+      # If you use NPS or freeradius with a STA agent, you can enter here its IP
+      # This IP is the RADIUS service endpoint of STA EU
+      RADIUS_HOST: 	34.77.242.204
+      RADIUS_PORT: 1812
