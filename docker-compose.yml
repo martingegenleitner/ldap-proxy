@@ -24,6 +24,8 @@ services:
       # MUST BE CHANGED
       # Service-Account LDAP-Password
       BIND_PASSWORD: AD_PASSWORD_OF_BIND_USER
+      # Base DN, if the supplied User is not a DN, but a Active Directory userPrincipalName
+      LDAP_BASE_DN: 'CN=Users,DC=thales,DC=lab'
       # MUST NOT BE CHANGED for Active Directory
       LDAP_GROUP_MEMBER_ATTRIBUTE_NAME: memberOf
       # CAN BE CHANGED

@@ -40,6 +40,7 @@ services:
       LISTENING_PORT: 8000
       BIND_USER: 'cn=ldap-proxy,ou=people,dc=example,dc=org'
       BIND_PASSWORD: ProxyTest123!
+      LDAP_BASE_DN: 'ou=people,dc=example,dc=org'
       LDAP_GROUP_MEMBER_ATTRIBUTE_NAME: memberOf
       MFA_USER_NAME_LDAP_ATTRIBUTE: cn
       MFA_USER_GROUP: 'cn=mfa-users,ou=groups,dc=example,dc=org'

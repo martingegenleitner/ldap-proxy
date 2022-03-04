@@ -2,7 +2,6 @@
 
 # This script is taken from https://ldaptor.readthedocs.io/en/latest/cookbook/ldap-proxy.html
 
-from email import message
 from ldaptor.protocols import pureldap
 from ldaptor.protocols.pureldap import LDAPBindRequest
 from ldaptor.protocols.ldap import ldaperrors
@@ -118,7 +117,29 @@ class LoggingProxy(ProxyBase):
         l.simple_bind_s(os.environ['BIND_USER'], os.environ['BIND_PASSWORD'])
 
         # Execute the query and filter for group members
-        result = l.search_s(request.dn.decode(), ldap.SCOPE_SUBTREE, query)
+        try:
+            result = l.search_s(request.dn.decode(), ldap.SCOPE_SUBTREE, query)
+        # It might happen on Active Directory that instead of the DN,
+        # the userPrincipalName is used for login (proprietary to AD)
+        except ldap.INVALID_DN_SYNTAX:
+            log.msg("WARNING: Using invalid syntax for DistinguishedName ({0}). Trying to find user by using supplied value as userPrincipalName (MS AD exception)...".format(request.dn.decode()))
+            # Build query like (&(memberOf=CN=mfa-users,CN=Users,DC=thales,DC=lab)(userPrincipalName=user@domain.com))
+            upnQuery = "(&({0}={1})(userPrincipalName={2}))".format(
+                os.environ['LDAP_GROUP_MEMBER_ATTRIBUTE_NAME'],
+                os.environ['MFA_USER_GROUP'],
+                request.dn.decode())
+            try:
+                result = l.search_s(os.environ['LDAP_BASE_DN'], ldap.SCOPE_SUBTREE, upnQuery)
+            except Exception as e:
+                log.msg("WARNING: Could not find user either by searching on UPN. Reason: {0}".format(e))
+                result = []
+        except ldap.NO_SUCH_OBJECT:
+            log.msg("WARNING: Provided DistinguishedName {0} could not be found. Will not perform MFA.".format(request.dn.decode()))
+            result = []
+        except Exception as e:
+            # If any other exception is raised by the ldap connection, log it
+            log.msg(e)
+            result = []
 
         # If user could not be found or it does not belong to the mfa-group, return None as MFA will not be performed
         if not result:
