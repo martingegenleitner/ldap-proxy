@@ -44,5 +44,5 @@ services:
       # CAN BE CHANGED
       # If you use NPS or freeradius with a STA agent, you can enter here its IP
       # This IP is the RADIUS service endpoint of STA EU
-      RADIUS_HOST: 	34.77.242.204
+      RADIUS_HOST: 34.77.242.204
       RADIUS_PORT: 1812
