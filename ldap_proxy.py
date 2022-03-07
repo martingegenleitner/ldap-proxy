@@ -164,6 +164,7 @@ class LoggingProxy(ProxyBase):
         return radiusUsername.decode()
 
     def secondFactorAuthentication(self, user, otp):
+        result = False
         r = radius.RADIUS(
             os.environ['RADIUS_SECRET'],
             host=os.environ['RADIUS_HOST'],
@@ -171,7 +172,13 @@ class LoggingProxy(ProxyBase):
             retries=3,
             timeout=30
         )
-        return r.authenticate(user, otp)
+
+        try:
+            result = r.authenticate(user, otp)
+        except radius.ChallengeResponse as e:
+            log.msg("WARNING: RADIUS-Challenge for user {0} not supported. Maybe User-Mapping is not correct -> Please check ENV-Var 'MFA_USER_NAME_LDAP_ATTRIBUTE'".format(user))
+
+        return result
 
 def ldapBindRequestRepr(self):
     l=[]
