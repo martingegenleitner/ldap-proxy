@@ -26,16 +26,18 @@ class LoggingProxy(ProxyBase):
     user_id = ""
 
     def handleBeforeForwardRequest(self, request, controls, reply):
-
         # Only intercept Bind-Requests for MFA
         if not isinstance(request, LDAPBindRequest):
             return defer.succeed((request, controls))
+
+        ldapUsername = request.dn.decode()
 
         log.msg("Intercepted Request => " + repr(request))
 
         # Only perform MFA on users from a given group
         self.user_id = self.isMultiFactorAuthUser(request)
         if not self.user_id:
+            log.msg("No MFA for {0}. Directly forwarding to LDAP server.".format(ldapUsername))
             return defer.succeed((request, controls))
 
         password, self.otp = self.splitPasswordAndOTP(request.auth)
@@ -60,8 +62,10 @@ class LoggingProxy(ProxyBase):
                 errorMessage=b'Wrong OTP'
             )
             reply(msg)
+            log.msg("INFO: OTP-Authentication for User {0} (RADIUS-Name = {1} failed - will not perform LDAP-auth.".format(ldapUsername, self.user_id))
             return defer.succeed(None)
 
+        log.msg("INFO: User {0} (RAIDUS-Name = {1}) successfully authenticated with OTP - trying LDAP-Password...".format(ldapUsername, self.user_id))
         return defer.succeed((request, controls))
 
     def handleProxiedResponse(self, response, request, controls):
@@ -69,23 +73,30 @@ class LoggingProxy(ProxyBase):
         if not isinstance(request, LDAPBindRequest):
             return defer.succeed(response)
 
+        ldapUsername = request.dn.decode()
+
         # If LDAP-Authentication failed, forward the response directly (no 2FA)
         if response.resultCode != 0:
+            log.msg("INFO: LDAP-Authentication failed for user {0}. Will not perform MFA.".format(ldapUsername))
             return defer.succeed(response)
 
         # If the intercepted Bind-Request is from a non-MFA-User, continue
         if not self.user_id:
+            log.msg("INFO: User {0} is not in the MFA-UsersGroup. Will not perform MFA.".format(ldapUsername))
             return defer.succeed(response)
 
         # If RADIUS auth has been performed before LDAP, continue
         if os.getenv("CHECK_RADIUS_BEFORE_LDAP", 'False').lower() in ('true', '1', 't'):
+            log.msg("INFO: LDAP-Authentication for user {0} (RADIUS-Name = {1}) was also successful - user authentication ok!".format(ldapUsername, self.user_id))
             return defer.succeed(response)
 
         if not self.secondFactorAuthentication(self.user_id, self.otp):
             response.resultCode = ldaperrors.LDAPInvalidCredentials.resultCode
             response.errorMessage = b'Wrong OTP'
+            log.msg("INFO: OTP-Authentication for User {0} (RADIUS-Name = {1}) failed - user not authenticated!".format(ldapUsername, self.user_id))
             return defer.succeed(response)
 
+        log.msg("INFO: OTP-Authentication for user {0} (RADIUS-Name = {1}) was also successful - user authentication ok!".format(ldapUsername, self.user_id))
         return defer.succeed(response)
 
     def splitPasswordAndOTP(self, ldapPassword):
@@ -106,6 +117,7 @@ class LoggingProxy(ProxyBase):
 
     # Mostly taken from https://github.com/python-ldap/python-ldap
     def isMultiFactorAuthUser(self, request):
+        bindUsername = request.dn.decode()
         # Query infos taken from ...
         # * https://devconnected.com/how-to-search-ldap-using-ldapsearch-examples/
         # * https://www.tutorialguruji.com/php/ldap-filter-for-distinguishedname/
@@ -118,26 +130,27 @@ class LoggingProxy(ProxyBase):
 
         # Execute the query and filter for group members
         try:
-            result = l.search_s(request.dn.decode(), ldap.SCOPE_SUBTREE, query)
+            result = l.search_s(bindUsername, ldap.SCOPE_SUBTREE, query)
         # It might happen on Active Directory that instead of the DN,
         # the userPrincipalName is used for login (proprietary to AD)
         except ldap.INVALID_DN_SYNTAX:
-            log.msg("WARNING: Using invalid syntax for DistinguishedName ({0}). Trying to find user by using supplied value as userPrincipalName (MS AD exception)...".format(request.dn.decode()))
+            log.msg("WARNING: Using invalid syntax for DistinguishedName ({0}). Trying to find user by using supplied value as userPrincipalName (MS AD exception)...".format(bindUsername))
             # Build query like (&(memberOf=CN=mfa-users,CN=Users,DC=thales,DC=lab)(userPrincipalName=user@domain.com))
             upnQuery = "(&({0}={1})(userPrincipalName={2}))".format(
                 os.environ['LDAP_GROUP_MEMBER_ATTRIBUTE_NAME'],
                 os.environ['MFA_USER_GROUP'],
-                request.dn.decode())
+                bindUsername)
             try:
                 result = l.search_s(os.environ['LDAP_BASE_DN'], ldap.SCOPE_SUBTREE, upnQuery)
             except Exception as e:
                 log.msg("WARNING: Could not find user either by searching on UPN. Reason: {0}".format(e))
                 result = []
         except ldap.NO_SUCH_OBJECT:
-            log.msg("WARNING: Provided DistinguishedName {0} could not be found. Will not perform MFA.".format(request.dn.decode()))
+            log.msg("WARNING: Provided DistinguishedName {0} could not be found. Will not perform MFA.".format(bindUsername))
             result = []
         except Exception as e:
             # If any other exception is raised by the ldap connection, log it
+            log.msg("WARNING: An unexpected error occured on querying LDAP for user {0}".format(bindUsername))
             log.msg(e)
             result = []
 
