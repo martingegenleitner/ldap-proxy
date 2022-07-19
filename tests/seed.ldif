@@ -48,16 +48,16 @@ dn: cn=ldap-consumer,ou=people,dc=example,dc=org
 changetype: add
 objectClass: simpleSecurityObject
 objectClass: organizationalRole
-description: Bind-Account for the LDAP-Proxy
-cn: ldap-proxy
+description: Bind-Account for the LDAP-Consumer
+cn: ldap-consumer
 userPassword: ConsumerTest123!
 
 dn: cn=radius-frontend,ou=people,dc=example,dc=org
 changetype: add
 objectClass: simpleSecurityObject
 objectClass: organizationalRole
-description: Bind-Account for the LDAP-Proxy
-cn: ldap-proxy
+description: Bind-Account for the RADIUS-Frontend
+cn: radius-frontend
 userPassword: RadiusFrontend123!
 
 # Grant service accounts permission to read directory
